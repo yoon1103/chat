@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>오목 게임</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: #f3efe5;
+      font-family: Arial, sans-serif;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    #status {
+      margin-bottom: 15px;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    #board {
+      position: relative;
+      width: 560px;
+      height: 560px;
+      background-color: #d9a85c;
+      border: 3px solid #5c3a18;
+      cursor: pointer;
+    }
+
+    .line {
+      position: absolute;
+      background-color: #4e3218;
+      pointer-events: none;
+    }
+
+    .horizontal {
+      width: 520px;
+      height: 1px;
+      left: 20px;
+    }
+
+    .vertical {
+      width: 1px;
+      height: 520px;
+      top: 20px;
+    }
+
+    .stone {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+      pointer-events: none;
+    }
+
+    .black {
+      background: radial-gradient(circle at 35% 30%, #555, #000);
+    }
+
+    .white {
+      background: radial-gradient(circle at 35% 30%, #fff, #bbb);
+      border: 1px solid #888;
+    }
+
+    .last-stone::after {
+      content: "";
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      background-color: red;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .star {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      background-color: #38230f;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .buttons {
+      margin-top: 18px;
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      padding: 10px 22px;
+      border: none;
+      border-radius: 8px;
+      background-color: #5c3a18;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #7a4d20;
+    }
+
+    @media (max-width: 620px) {
+      #board {
+        width: 90vw;
+        height: 90vw;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>오목 게임</h1>
+
+  <div id="status">흑돌 차례입니다.</div>
+
+  <div id="board"></div>
+
+  <div class="buttons">
+    <button onclick="undoMove()">한 수 무르기</button>
+    <button onclick="resetGame()">게임 다시 시작</button>
+  </div>
+
+  <script>
+    const boardSize = 15;
+    const boardElement = document.getElementById("board");
+    const statusElement = document.getElementById("status");
+
+    let board = [];
+    let currentPlayer = 1;
+    let gameOver = false;
+    let moveHistory = [];
+
+    function initializeGame() {
+      board = Array.from(
+        { length: boardSize },
+        () => Array(boardSize).fill(0)
+      );
+
+      currentPlayer = 1;
+      gameOver = false;
+      moveHistory = [];
+
+      statusElement.textContent = "흑돌 차례입니다.";
+      boardElement.innerHTML = "";
+
+      createBoardLines();
+      createStarPoints();
+    }
+
+    function getBoardInfo() {
+      const boardWidth = boardElement.clientWidth;
+      const padding = boardWidth / 28;
+      const gap = (boardWidth - padding * 2) / (boardSize - 1);
+
+      return {
+        boardWidth,
+        padding,
+        gap
+      };
+    }
+
+    function createBoardLines() {
+      const { padding, gap, boardWidth } = getBoardInfo();
+      const lineLength = boardWidth - padding * 2;
+
+      for (let i = 0; i < boardSize; i++) {
+        const horizontalLine = document.createElement("div");
+        horizontalLine.className = "line horizontal";
+        horizontalLine.style.top = `${padding + i * gap}px`;
+        horizontalLine.style.left = `${padding}px`;
+        horizontalLine.style.width = `${lineLength}px`;
+
+        const verticalLine = document.createElement("div");
+        verticalLine.className = "line vertical";
+        verticalLine.style.left = `${padding + i * gap}px`;
+        verticalLine.style.top = `${padding}px`;
+        verticalLine.style.height = `${lineLength}px`;
+
+        boardElement.appendChild(horizontalLine);
+        boardElement.appendChild(verticalLine);
+      }
+    }
+
+    function createStarPoints() {
+      const starPositions = [
+        [3, 3],
+        [3, 11],
+        [7, 7],
+        [11, 3],
+        [11, 11]
+      ];
+
+      const { padding, gap } = getBoardInfo();
+
+      starPositions.forEach(([row, col]) => {
+        const star = document.createElement("div");
+        star.className = "star";
+
+        star.style.left = `${padding + col * gap}px`;
+        star.style.top = `${padding + row * gap}px`;
+
+        boardElement.appendChild(star);
+      });
+    }
+
+    boardElement.addEventListener("click", function(event) {
+      if (gameOver) {
+        return;
+      }
+
+      const rect = boardElement.getBoundingClientRect();
+      const { padding, gap } = getBoardInfo();
+
+      const clickX = event.clientX - rect.left;
+      const clickY = event.clientY - rect.top;
+
+      const col = Math.round((clickX - padding) / gap);
+      const row = Math.round((clickY - padding) / gap);
+
+      if (
+        row < 0 ||
+        row >= boardSize ||
+        col < 0 ||
+        col >= boardSize
+      ) {
+        return;
+      }
+
+      if (board[row][col] !== 0) {
+        alert("이미 돌이 놓여 있는 자리입니다.");
+        return;
+      }
+
+      placeStone(row, col);
+    });
+
+    function placeStone(row, col) {
+      board[row][col] = currentPlayer;
+
+      moveHistory.push({
+        row,
+        col,
+        player: currentPlayer
+      });
+
+      drawStone(row, col, currentPlayer);
+
+      if (checkWin(row, col, currentPlayer)) {
+        const winner = currentPlayer === 1 ? "흑돌" : "백돌";
+        statusElement.textContent = `${winner}이 승리했습니다!`;
+        gameOver = true;
+        return;
+      }
+
+      if (moveHistory.length === boardSize * boardSize) {
+        statusElement.textContent = "무승부입니다.";
+        gameOver = true;
+        return;
+      }
+
+      currentPlayer = currentPlayer === 1 ? 2 : 1;
+
+      statusElement.textContent =
+        currentPlayer === 1
+          ? "흑돌 차례입니다."
+          : "백돌 차례입니다.";
+    }
+
+    function drawStone(row, col, player) {
+      document
+        .querySelectorAll(".last-stone")
+        .forEach(stone => stone.classList.remove("last-stone"));
+
+      const { padding, gap, boardWidth } = getBoardInfo();
+
+      const stone = document.createElement("div");
+
+      stone.className =
+        player === 1
+          ? "stone black last-stone"
+          : "stone white last-stone";
+
+      const stoneSize = Math.max(18, boardWidth / 17.5);
+
+      stone.style.width = `${stoneSize}px`;
+      stone.style.height = `${stoneSize}px`;
+      stone.style.left = `${padding + col * gap}px`;
+      stone.style.top = `${padding + row * gap}px`;
+
+      stone.dataset.row = row;
+      stone.dataset.col = col;
+
+      boardElement.appendChild(stone);
+    }
+
+    function checkWin(row, col, player) {
+      const directions = [
+        [0, 1],
+        [1, 0],
+        [1, 1],
+        [1, -1]
+      ];
+
+      for (const [rowDirection, colDirection] of directions) {
+        let count = 1;
+
+        count += countStones(
+          row,
+          col,
+          rowDirection,
+          colDirection,
+          player
+        );
+
+        count += countStones(
+          row,
+          col,
+          -rowDirection,
+          -colDirection,
+          player
+        );
+
+        if (count >= 5) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    function countStones(
+      row,
+      col,
+      rowDirection,
+      colDirection,
+      player
+    ) {
+      let count = 0;
+
+      let nextRow = row + rowDirection;
+      let nextCol = col + colDirection;
+
+      while (
+        nextRow >= 0 &&
+        nextRow < boardSize &&
+        nextCol >= 0 &&
+        nextCol < boardSize &&
+        board[nextRow][nextCol] === player
+      ) {
+        count++;
+
+        nextRow += rowDirection;
+        nextCol += colDirection;
+      }
+
+      return count;
+    }
+
+    function undoMove() {
+      if (moveHistory.length === 0) {
+        alert("무를 수 있는 돌이 없습니다.");
+        return;
+      }
+
+      const lastMove = moveHistory.pop();
+
+      board[lastMove.row][lastMove.col] = 0;
+      gameOver = false;
+      currentPlayer = lastMove.player;
+
+      const stone = document.querySelector(
+        `.stone[data-row="${lastMove.row}"][data-col="${lastMove.col}"]`
+      );
+
+      if (stone) {
+        stone.remove();
+      }
+
+      document
+        .querySelectorAll(".last-stone")
+        .forEach(item => item.classList.remove("last-stone"));
+
+      if (moveHistory.length > 0) {
+        const previousMove = moveHistory[moveHistory.length - 1];
+
+        const previousStone = document.querySelector(
+          `.stone[data-row="${previousMove.row}"][data-col="${previousMove.col}"]`
+        );
+
+        if (previousStone) {
+          previousStone.classList.add("last-stone");
+        }
+      }
+
+      statusElement.textContent =
+        currentPlayer === 1
+          ? "흑돌 차례입니다."
+          : "백돌 차례입니다.";
+    }
+
+    function resetGame() {
+      initializeGame();
+    }
+
+    window.addEventListener("resize", function() {
+      const savedMoves = [...moveHistory];
+
+      boardElement.innerHTML = "";
+      createBoardLines();
+      createStarPoints();
+
+      savedMoves.forEach(move => {
+        drawStone(move.row, move.col, move.player);
+      });
+    });
+
+    initializeGame();
+  </script>
+
+</body>
+</html>
